@@ -1,0 +1,18 @@
+[project]
+name = "tesla-checker"
+version = "1.0.0"
+description = "Tesla Model 3 used car inventory checker with push notifications"
+requires-python = ">=3.12"
+dependencies = [
+    "playwright",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

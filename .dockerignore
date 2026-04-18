@@ -1,0 +1,12 @@
+.venv
+.git
+.gitignore
+.github
+.pytest_cache
+.playwright-mcp
+__pycache__
+*.pyc
+*.egg-info
+deploy
+tests
+results
