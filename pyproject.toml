@@ -1,0 +1,51 @@
+[project]
+name = "tesla-checker"
+version = "1.0.0"
+description = "Tesla Model 3 used car inventory checker with push notifications"
+requires-python = ">=3.12"
+dependencies = [
+    "playwright",
+    "camoufox",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+    "pre-commit",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["camoufox.*", "playwright.*"]
+ignore_missing_imports = true
+
+# Camoufox has no type stubs
+[[tool.mypy.overrides]]
+module = ["src.infrastructure.tesla_playwright_gateway"]
+disallow_untyped_calls = false

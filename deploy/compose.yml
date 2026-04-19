@@ -1,0 +1,14 @@
+services:
+  tesla-checker:
+    image: ghcr.io/mrz1880/tesla-checker:latest
+    container_name: tesla-checker
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Paris
+      NTFY_TOPIC: ${NTFY_TOPIC}
+      NTFY_URL: ${NTFY_URL:-https://ntfy.sh}
+      CRON_SCHEDULE: ${CRON_SCHEDULE:-30 8,18 * * *}
+    volumes:
+      - /volume1/docker/configs/tesla-checker/data:/data
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
