@@ -15,47 +15,59 @@ class NtfyNotifier:
         self._base_url = base_url.rstrip("/")
 
     def notify_new_vehicle(self, vehicle: Vehicle) -> None:
-        if not self._topic:
-            log.warning("NTFY_TOPIC not set, skipping notification.")
-            return
-
-        payload = {
-            "topic": self._topic,
-            "title": f"Tesla M3 {vehicle.title} ({vehicle.year})",
-            "message": (
+        self._send(
+            title=f"Tesla M3 {vehicle.title} ({vehicle.year})",
+            message=(
                 f"{vehicle.price:,} EUR | {vehicle.odometer:,} km | {vehicle.color_label}\n"
                 f"Lieu: {vehicle.city}\n"
                 f"VIN: {vehicle.vin}"
             ),
-            "priority": 4,
-            "tags": ["car", "zap"],
-            "click": vehicle.link,
-        }
+            priority=4,
+            tags=["car", "zap"],
+            click=vehicle.link,
+        )
 
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(self._base_url, data=data, method="POST")
-        req.add_header("Content-Type", "application/json")
-
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                if resp.status == 200:
-                    log.info(f"Notification sent for {vehicle.vin}")
-                else:
-                    log.error(f"Notification failed ({resp.status}) for {vehicle.vin}")
-        except Exception as e:
-            log.error(f"Notification error: {e}")
+    def notify_sold_vehicle(self, vehicle: Vehicle) -> None:
+        self._send(
+            title=f"Vendu: Tesla M3 {vehicle.title} ({vehicle.year})",
+            message=(
+                f"{vehicle.price:,} EUR | {vehicle.odometer:,} km | {vehicle.color_label}\n"
+                f"Lieu: {vehicle.city}\n"
+                f"VIN: {vehicle.vin}"
+            ),
+            priority=2,
+            tags=["white_check_mark"],
+        )
 
     def notify_error(self, message: str) -> None:
+        self._send(
+            title="Tesla Checker - Erreur",
+            message=message,
+            priority=5,
+            tags=["warning", "rotating_light"],
+        )
+
+    def _send(
+        self,
+        title: str,
+        message: str,
+        priority: int,
+        tags: list[str],
+        click: str | None = None,
+    ) -> None:
         if not self._topic:
+            log.warning("NTFY_TOPIC not set, skipping notification.")
             return
 
-        payload = {
+        payload: dict[str, object] = {
             "topic": self._topic,
-            "title": "Tesla Checker - Erreur",
+            "title": title,
             "message": message,
-            "priority": 5,
-            "tags": ["warning", "rotating_light"],
+            "priority": priority,
+            "tags": tags,
         }
+        if click is not None:
+            payload["click"] = click
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(self._base_url, data=data, method="POST")
@@ -64,6 +76,8 @@ class NtfyNotifier:
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 if resp.status == 200:
-                    log.info("Error notification sent")
+                    log.info(f"Notification sent: {title}")
+                else:
+                    log.error(f"Notification failed ({resp.status}): {title}")
         except Exception as e:
-            log.error(f"Failed to send error notification: {e}")
+            log.error(f"Notification error: {e}")

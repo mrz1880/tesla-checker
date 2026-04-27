@@ -69,6 +69,8 @@ class CheckInventoryUseCase:
 
         if diff.removed_vehicles:
             log.info(f"{len(diff.removed_vehicles)} vehicle(s) removed since last check.")
+            for vehicle in diff.removed_vehicles:
+                self._notifier.notify_sold_vehicle(vehicle)
 
         self._repository.save(snapshot)
 

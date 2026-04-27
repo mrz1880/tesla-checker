@@ -53,10 +53,14 @@ class FakeRepository:
 class FakeNotifier:
     def __init__(self) -> None:
         self.notified: list[Vehicle] = []
+        self.sold: list[Vehicle] = []
         self.errors: list[str] = []
 
     def notify_new_vehicle(self, vehicle: Vehicle) -> None:
         self.notified.append(vehicle)
+
+    def notify_sold_vehicle(self, vehicle: Vehicle) -> None:
+        self.sold.append(vehicle)
 
     def notify_error(self, message: str) -> None:
         self.errors.append(message)
@@ -150,6 +154,24 @@ class TestCheckInventoryUseCase:
 
         assert repository.saved is not None
         assert len(repository.saved.vehicles) == 1
+
+    def test_notifies_sold_vehicles(self) -> None:
+        previous = InventorySnapshot(
+            checked_at=datetime(2026, 4, 18, 8, 0, 0),
+            vehicles=(_vehicle("A"), _vehicle("B")),
+        )
+        gateway = FakeGateway([_vehicle("A")])
+        repository = FakeRepository(latest=previous)
+        notifier = FakeNotifier()
+
+        use_case = _make_use_case(gateway, repository, notifier)
+        result = use_case.execute()
+
+        assert len(result.diff.removed_vehicles) == 1
+        assert result.diff.removed_vehicles[0].vin == "B"
+        assert len(notifier.sold) == 1
+        assert notifier.sold[0].vin == "B"
+        assert len(notifier.notified) == 0
 
     def test_empty_gateway_response(self) -> None:
         gateway = FakeGateway([])
