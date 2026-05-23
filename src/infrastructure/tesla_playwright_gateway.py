@@ -6,6 +6,7 @@ import re
 import urllib.parse
 
 from camoufox import Camoufox
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
 
 from src.config import SearchConfig
@@ -160,6 +161,36 @@ def _build_api_query(config: SearchConfig) -> dict[str, object]:
     }
 
 
+_FETCH_API_JS = """async (apiUrl) => {
+    try {
+        const resp = await fetch(apiUrl, {
+            credentials: 'include',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!resp.ok) return { error: resp.status };
+        return { data: await resp.json() };
+    } catch (e) {
+        return { error: e.message };
+    }
+}"""
+
+
+def _fetch_api_via_page(page: Page, api_url: str) -> dict[str, object]:
+    # Tesla sometimes navigates the page (lazy chunk, redirect, popup) right
+    # as we run page.evaluate, destroying the JS execution context. Retry
+    # once after a short wait — it's a transient race, not a real failure.
+    try:
+        result: dict[str, object] = page.evaluate(_FETCH_API_JS, api_url)
+        return result
+    except PlaywrightError as e:
+        if "Execution context was destroyed" not in str(e):
+            raise
+        log.warning("Page navigated during evaluate, retrying after 3s...")
+        page.wait_for_timeout(3000)
+        retry: dict[str, object] = page.evaluate(_FETCH_API_JS, api_url)
+        return retry
+
+
 class TeslaPlaywrightGateway:
     def __init__(self, config: SearchConfig) -> None:
         self._config = config
@@ -182,21 +213,7 @@ class TeslaPlaywrightGateway:
 
             # Strategy 1: call the API directly
             log.info("Trying Tesla inventory API...")
-            raw_result: dict[str, object] = page.evaluate(
-                """async (apiUrl) => {
-                    try {
-                        const resp = await fetch(apiUrl, {
-                            credentials: 'include',
-                            headers: { 'Accept': 'application/json' }
-                        });
-                        if (!resp.ok) return { error: resp.status };
-                        return { data: await resp.json() };
-                    } catch (e) {
-                        return { error: e.message };
-                    }
-                }""",
-                api_url,
-            )
+            raw_result = _fetch_api_via_page(page, api_url)
 
             vehicles: list[Vehicle] = []
 
