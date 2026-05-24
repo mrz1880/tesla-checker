@@ -34,12 +34,17 @@ def _extract_search_data(raw: str) -> LbcSearchData:
     return LbcSearchData.model_validate(payload)
 
 
+class LeboncoinBlockedError(RuntimeError):
+    """DataDome blocked the warmup; no LBC scraping is possible this run."""
+
+
 class LeboncoinScraper:
     def __init__(self) -> None:
         self._browser_ctx: object | None = None
         self._browser: object | None = None
         self._page: object | None = None
         self._http: cc.Session | None = None
+        self.blocked: bool = False
 
     def __enter__(self) -> LeboncoinScraper:
         log.info("Starting Leboncoin Camoufox session...")
@@ -50,6 +55,16 @@ class LeboncoinScraper:
         log.info("Warming up via Leboncoin homepage...")
         self._page.goto(_HOME_URL, wait_until="domcontentloaded", timeout=60000)
         self._page.wait_for_timeout(5000)
+
+        # DataDome serves a challenge page when the IP is flagged. The real
+        # homepage has __NEXT_DATA__; the challenge has only an inline script.
+        homepage_ok = self._page.evaluate(
+            "() => !!document.getElementById('__NEXT_DATA__')"
+        )
+        if not homepage_ok:
+            log.warning("Leboncoin homepage warmup blocked by DataDome.")
+            self.blocked = True
+            return self
 
         cookies = self._page.context.cookies()
         ua = self._page.evaluate("() => navigator.userAgent")
@@ -86,6 +101,10 @@ class LeboncoinScraper:
             self._page = None
 
     def fetch_search_ads(self, search_url: str) -> list[LbcAd]:
+        if self.blocked:
+            raise LeboncoinBlockedError(
+                "Leboncoin warmup was blocked by DataDome; skipping search."
+            )
         if self._page is None:
             raise RuntimeError("LeboncoinScraper used outside its context manager.")
         log.info(f"Loading Leboncoin search page: {search_url}")

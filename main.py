@@ -104,11 +104,24 @@ def main() -> None:
     # All Leboncoin profiles share a single Camoufox warmup + curl-cffi session
     # to keep DataDome happy across consecutive model searches.
     with LeboncoinScraper() as scraper:
-        for lbc_config in (config.lbc_m3, config.lbc_my):
-            profile = _lbc_profile(lbc_config, base_dir, scraper)
-            total += 1
-            if not _run_profile(profile, notifier, clock):
-                failed += 1
+        lbc_configs = (config.lbc_m3, config.lbc_my)
+        if scraper.blocked:
+            # One notif for the whole LBC side instead of N noisy ones per profile.
+            log.warning(
+                "Leboncoin blocked by DataDome at warmup; skipping all LBC profiles."
+            )
+            notifier.notify_error(
+                "Leboncoin bloqué par DataDome (anti-bot).\n"
+                "Aucune annonce LBC vérifiée ce tour. Réessai au prochain cron."
+            )
+            failed += len(lbc_configs)
+            total += len(lbc_configs)
+        else:
+            for lbc_config in lbc_configs:
+                profile = _lbc_profile(lbc_config, base_dir, scraper)
+                total += 1
+                if not _run_profile(profile, notifier, clock):
+                    failed += 1
 
     if failed:
         log.error(f"{failed}/{total} profile(s) failed.")
