@@ -22,8 +22,8 @@ class InventorySnapshot:
     vehicles: tuple[Vehicle, ...]
 
     @property
-    def vins(self) -> frozenset[str]:
-        return frozenset(v.vin for v in self.vehicles)
+    def ids(self) -> frozenset[str]:
+        return frozenset(v.id for v in self.vehicles)
 
     def diff(self, previous: InventorySnapshot | None) -> InventoryDiff:
         if previous is None:
@@ -32,10 +32,10 @@ class InventorySnapshot:
                 removed_vehicles=(),
             )
 
-        previous_vins = previous.vins
-        current_vins = self.vins
+        previous_ids = previous.ids
+        current_ids = self.ids
 
-        new = tuple(v for v in self.vehicles if v.vin not in previous_vins)
-        removed = tuple(v for v in previous.vehicles if v.vin not in current_vins)
+        new = tuple(v for v in self.vehicles if v.id not in previous_ids)
+        removed = tuple(v for v in previous.vehicles if v.id not in current_ids)
 
         return InventoryDiff(new_vehicles=new, removed_vehicles=removed)

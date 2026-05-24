@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Protocol
 
@@ -12,7 +13,7 @@ class Clock(Protocol):
 
 
 class InventoryGateway(Protocol):
-    def fetch_vehicles(self) -> list[Vehicle]: ...
+    def fetch_vehicles(self, known: Mapping[str, Vehicle]) -> list[Vehicle]: ...
 
 
 class SnapshotRepository(Protocol):

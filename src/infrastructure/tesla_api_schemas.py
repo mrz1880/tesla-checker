@@ -31,20 +31,3 @@ class TeslaInventoryResponse(BaseModel):
         if isinstance(value, dict):
             return value.get("exact", [])
         return value
-
-
-class TeslaSnapshotVehicle(BaseModel):
-    vin: str
-    title: str
-    trim: str
-    year: int
-    odometer: int
-    price: int
-    paint: str
-    has_enhanced_autopilot: bool
-    city: str
-
-
-class TeslaSnapshotData(BaseModel):
-    checked_at: str
-    vehicles: list[TeslaSnapshotVehicle]

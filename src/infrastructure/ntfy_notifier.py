@@ -9,6 +9,22 @@ from src.domain.vehicle import Vehicle
 log = logging.getLogger(__name__)
 
 
+def _vehicle_message(vehicle: Vehicle) -> str:
+    return (
+        f"{vehicle.price:,} EUR | {vehicle.odometer:,} km"
+        f" | {vehicle.color_label} | {vehicle.autopilot_label}\n"
+        f"Lieu: {vehicle.city}\n"
+        f"Ref: {vehicle.id}"
+    )
+
+
+def _vehicle_title(vehicle: Vehicle, prefix: str) -> str:
+    return (
+        f"{prefix} {vehicle.source_label} {vehicle.model_label} "
+        f"{vehicle.title} ({vehicle.year})"
+    ).strip()
+
+
 class NtfyNotifier:
     def __init__(self, topic: str, base_url: str = "https://ntfy.sh") -> None:
         self._topic = topic
@@ -16,12 +32,8 @@ class NtfyNotifier:
 
     def notify_new_vehicle(self, vehicle: Vehicle) -> None:
         self._send(
-            title=f"Tesla M3 {vehicle.title} ({vehicle.year})",
-            message=(
-                f"{vehicle.price:,} EUR | {vehicle.odometer:,} km | {vehicle.color_label}\n"
-                f"Lieu: {vehicle.city}\n"
-                f"VIN: {vehicle.vin}"
-            ),
+            title=_vehicle_title(vehicle, prefix=""),
+            message=_vehicle_message(vehicle),
             priority=4,
             tags=["car", "zap"],
             click=vehicle.link,
@@ -29,12 +41,8 @@ class NtfyNotifier:
 
     def notify_sold_vehicle(self, vehicle: Vehicle) -> None:
         self._send(
-            title=f"Vendu: Tesla M3 {vehicle.title} ({vehicle.year})",
-            message=(
-                f"{vehicle.price:,} EUR | {vehicle.odometer:,} km | {vehicle.color_label}\n"
-                f"Lieu: {vehicle.city}\n"
-                f"VIN: {vehicle.vin}"
-            ),
+            title=_vehicle_title(vehicle, prefix="Vendu:"),
+            message=_vehicle_message(vehicle),
             priority=2,
             tags=["white_check_mark"],
         )

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from src.domain.inventory_snapshot import InventoryDiff, InventorySnapshot
 from src.domain.ports import Clock, InventoryGateway, NotificationSender, SnapshotRepository
 from src.domain.search_criteria import SearchCriteria
+from src.domain.vehicle import Vehicle
 
 log = logging.getLogger(__name__)
 
@@ -32,24 +33,30 @@ class CheckInventoryUseCase:
         self._criteria = criteria
 
     def execute(self) -> CheckResult:
-        log.info("Fetching inventory from Tesla...")
+        previous = self._repository.load_latest()
+        known: dict[str, Vehicle] = (
+            {v.id: v for v in previous.vehicles} if previous is not None else {}
+        )
+
+        log.info("Fetching inventory...")
         try:
-            all_vehicles = self._gateway.fetch_vehicles()
+            all_vehicles = self._gateway.fetch_vehicles(known=known)
         except Exception as e:
             log.error(f"Failed to fetch inventory: {e}")
             self._notifier.notify_error(
-                f"Impossible de récupérer l'inventaire Tesla.\n\nErreur: {e}"
+                f"Impossible de récupérer l'inventaire.\n\nErreur: {e}"
             )
             raise
-        log.info(f"Fetched {len(all_vehicles)} vehicle(s) from Tesla API.")
+        log.info(f"Fetched {len(all_vehicles)} vehicle(s).")
 
         matching = [v for v in all_vehicles if self._criteria.matches(v)]
         log.info(f"{len(matching)} vehicle(s) match search criteria.")
 
         for v in matching:
             log.info(
-                f"  {v.title} ({v.year}) - {v.price:,} EUR"
-                f" - {v.odometer:,} km - {v.color_label} - {v.city}"
+                f"  {v.source_label} {v.model_label} {v.title} ({v.year})"
+                f" - {v.price:,} EUR - {v.odometer:,} km"
+                f" - {v.color_label} - {v.autopilot_label} - {v.city}"
             )
 
         snapshot = InventorySnapshot(
@@ -57,7 +64,6 @@ class CheckInventoryUseCase:
             vehicles=tuple(matching),
         )
 
-        previous = self._repository.load_latest()
         diff = snapshot.diff(previous)
 
         if diff.new_vehicles:

@@ -47,5 +47,8 @@ ignore_missing_imports = true
 
 # Camoufox has no type stubs
 [[tool.mypy.overrides]]
-module = ["src.infrastructure.tesla_playwright_gateway"]
+module = [
+    "src.infrastructure.tesla_playwright_gateway",
+    "src.infrastructure.leboncoin_gateway",
+]
 disallow_untyped_calls = false

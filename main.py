@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Composition root - wires dependencies and runs the use case."""
+"""Composition root - wires dependencies and runs all configured profiles."""
+
+from __future__ import annotations
 
 import logging
-import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from src.application.check_inventory import CheckInventoryUseCase
-from src.config import load_config
+from src.config import AppConfig, LeboncoinSearchConfig, TeslaSearchConfig, load_config
+from src.domain.ports import InventoryGateway
 from src.domain.search_criteria import SearchCriteria
-from src.domain.vehicle import Paint, Trim
 from src.infrastructure.json_snapshot_repository import JsonSnapshotRepository
+from src.infrastructure.leboncoin_gateway import LeboncoinGateway
 from src.infrastructure.ntfy_notifier import NtfyNotifier
 from src.infrastructure.system_clock import SystemClock
 from src.infrastructure.tesla_playwright_gateway import TeslaPlaywrightGateway
@@ -20,35 +23,83 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
+log = logging.getLogger("tesla-checker")
+
+
+@dataclass(frozen=True)
+class SearchProfile:
+    name: str
+    gateway: InventoryGateway
+    criteria: SearchCriteria
+    data_dir: Path
+
+
+def _tesla_profile(config: TeslaSearchConfig, base_dir: Path) -> SearchProfile:
+    return SearchProfile(
+        name=f"tesla-{config.model.value.lower()}",
+        gateway=TeslaPlaywrightGateway(config),
+        criteria=SearchCriteria(
+            trims=frozenset(config.trims),
+            paints=frozenset(config.paints),
+            min_year=config.min_year,
+            max_odometer=config.max_odometer,
+            accepted_autopilots=frozenset(config.accepted_autopilots),
+        ),
+        data_dir=base_dir / f"tesla-{config.model.value.lower()}",
+    )
+
+
+def _lbc_profile(config: LeboncoinSearchConfig, base_dir: Path) -> SearchProfile:
+    return SearchProfile(
+        name=f"lbc-{config.model.value.lower()}",
+        gateway=LeboncoinGateway(config),
+        criteria=SearchCriteria(
+            trims=frozenset(config.trims),
+            paints=frozenset(config.paints),
+            min_year=config.min_year,
+            max_odometer=config.max_odometer,
+            accepted_autopilots=frozenset(config.accepted_autopilots),
+        ),
+        data_dir=base_dir / f"lbc-{config.model.value.lower()}",
+    )
+
+
+def _build_profiles(config: AppConfig) -> list[SearchProfile]:
+    base_dir = Path(config.results_dir)
+    return [
+        _tesla_profile(config.tesla_m3, base_dir),
+        _lbc_profile(config.lbc_m3, base_dir),
+        _lbc_profile(config.lbc_my, base_dir),
+    ]
+
 
 def main() -> None:
     config = load_config()
-
-    criteria = SearchCriteria(
-        trims=frozenset(Trim(t) for t in config.search.trims),
-        paints=frozenset(Paint(p) for p in config.search.paints),
-        min_year=config.search.min_year,
-        max_odometer=config.search.max_odometer,
-        enhanced_autopilot=config.search.require_enhanced_autopilot,
-    )
-
-    gateway = TeslaPlaywrightGateway(config.search)
-    repository = JsonSnapshotRepository(Path(config.results_dir))
     notifier = NtfyNotifier(topic=config.notify.topic, base_url=config.notify.base_url)
     clock = SystemClock()
 
-    use_case = CheckInventoryUseCase(
-        gateway=gateway,
-        repository=repository,
-        notifier=notifier,
-        clock=clock,
-        criteria=criteria,
-    )
+    profiles = _build_profiles(config)
+    failed = 0
 
-    result = use_case.execute()
+    for profile in profiles:
+        log.info("=" * 60)
+        log.info(f"Profile: {profile.name}")
+        log.info("=" * 60)
+        try:
+            use_case = CheckInventoryUseCase(
+                gateway=profile.gateway,
+                repository=JsonSnapshotRepository(profile.data_dir),
+                notifier=notifier,
+                clock=clock,
+                criteria=profile.criteria,
+            )
+            use_case.execute()
+        except Exception as e:
+            log.exception(f"Profile {profile.name} failed: {e}")
+            failed += 1
 
-    if result.diff.new_vehicles:
-        sys.exit(2)
+    if failed:
+        log.error(f"{failed}/{len(profiles)} profile(s) failed.")
 
 
 if __name__ == "__main__":

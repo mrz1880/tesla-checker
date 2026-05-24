@@ -4,21 +4,24 @@ from pathlib import Path
 import pytest
 
 from src.domain.inventory_snapshot import InventorySnapshot
-from src.domain.vehicle import Paint, Trim, Vehicle
+from src.domain.vehicle import Autopilot, Model, Paint, Source, Trim, Vehicle
 from src.infrastructure.json_snapshot_repository import JsonSnapshotRepository
 
 
-def _vehicle(vin: str = "VIN001") -> Vehicle:
+def _vehicle(vid: str = "VIN001") -> Vehicle:
     return Vehicle(
-        vin=vin,
+        id=vid,
+        source=Source.TESLA,
+        model=Model.M3,
         title="Premium Grande Autonomie TI",
         trim=Trim.PRAWD,
         year=2024,
         odometer=29752,
         price=40100,
         paint=Paint.WHITE,
-        has_enhanced_autopilot=True,
+        autopilot=Autopilot.ENHANCED,
         city="Paris",
+        link=f"https://www.tesla.com/fr_fr/m3/order/{vid}",
     )
 
 
@@ -43,8 +46,8 @@ class TestJsonSnapshotRepository:
         assert loaded is not None
         assert loaded.checked_at == snapshot.checked_at
         assert len(loaded.vehicles) == 2
-        assert loaded.vehicles[0].vin == "A"
-        assert loaded.vehicles[1].vin == "B"
+        assert loaded.vehicles[0].id == "A"
+        assert loaded.vehicles[1].id == "B"
 
     def test_save_creates_history_file(self, repo: JsonSnapshotRepository, tmp_path: Path) -> None:
         snapshot = InventorySnapshot(
@@ -76,15 +79,18 @@ class TestJsonSnapshotRepository:
 
     def test_roundtrip_preserves_all_fields(self, repo: JsonSnapshotRepository) -> None:
         vehicle = Vehicle(
-            vin="LRW3E7ET8RC170223",
+            id="LRW3E7ET8RC170223",
+            source=Source.LEBONCOIN,
+            model=Model.MY,
             title="Performance Transmission Intégrale",
             trim=Trim.PAWD,
             year=2024,
             odometer=25203,
             price=48700,
             paint=Paint.BLACK,
-            has_enhanced_autopilot=True,
+            autopilot=Autopilot.FSD,
             city="Saint-Priest",
+            link="https://www.leboncoin.fr/ad/voitures/3130915050",
         )
         snapshot = InventorySnapshot(
             checked_at=datetime(2026, 4, 18, 12, 30, 45),
@@ -96,12 +102,15 @@ class TestJsonSnapshotRepository:
 
         assert loaded is not None
         v = loaded.vehicles[0]
-        assert v.vin == vehicle.vin
+        assert v.id == vehicle.id
+        assert v.source == vehicle.source
+        assert v.model == vehicle.model
         assert v.title == vehicle.title
         assert v.trim == vehicle.trim
         assert v.year == vehicle.year
         assert v.odometer == vehicle.odometer
         assert v.price == vehicle.price
         assert v.paint == vehicle.paint
-        assert v.has_enhanced_autopilot == vehicle.has_enhanced_autopilot
+        assert v.autopilot == vehicle.autopilot
         assert v.city == vehicle.city
+        assert v.link == vehicle.link

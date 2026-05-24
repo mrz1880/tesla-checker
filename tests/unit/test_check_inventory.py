@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import datetime
 
 import pytest
@@ -5,36 +6,47 @@ import pytest
 from src.application.check_inventory import CheckInventoryUseCase
 from src.domain.inventory_snapshot import InventorySnapshot
 from src.domain.search_criteria import SearchCriteria
-from src.domain.vehicle import Paint, Trim, Vehicle
+from src.domain.vehicle import Autopilot, Model, Paint, Source, Trim, Vehicle
 
 CRITERIA = SearchCriteria(
     trims=frozenset({Trim.PRAWD, Trim.PAWD}),
     paints=frozenset({Paint.WHITE, Paint.BLACK}),
     min_year=2024,
     max_odometer=50000,
-    enhanced_autopilot=True,
+    accepted_autopilots=frozenset({Autopilot.ENHANCED}),
 )
 
 
-def _vehicle(vin: str, trim: Trim = Trim.PRAWD, year: int = 2024, odometer: int = 20000) -> Vehicle:
+def _vehicle(
+    vid: str,
+    trim: Trim = Trim.PRAWD,
+    year: int = 2024,
+    odometer: int = 20000,
+    autopilot: Autopilot = Autopilot.ENHANCED,
+) -> Vehicle:
     return Vehicle(
-        vin=vin,
+        id=vid,
+        source=Source.TESLA,
+        model=Model.M3,
         title="Test",
         trim=trim,
         year=year,
         odometer=odometer,
         price=40000,
         paint=Paint.WHITE,
-        has_enhanced_autopilot=True,
+        autopilot=autopilot,
         city="Paris",
+        link=f"https://www.tesla.com/fr_fr/m3/order/{vid}",
     )
 
 
 class FakeGateway:
     def __init__(self, vehicles: list[Vehicle]) -> None:
         self._vehicles = vehicles
+        self.last_known: Mapping[str, Vehicle] | None = None
 
-    def fetch_vehicles(self) -> list[Vehicle]:
+    def fetch_vehicles(self, known: Mapping[str, Vehicle]) -> list[Vehicle]:
+        self.last_known = known
         return self._vehicles
 
 
@@ -101,7 +113,8 @@ class TestCheckInventoryUseCase:
         matching = _vehicle("A")
         too_old = _vehicle("B", year=2023)
         too_many_km = _vehicle("C", odometer=60000)
-        gateway = FakeGateway([matching, too_old, too_many_km])
+        no_autopilot = _vehicle("D", autopilot=Autopilot.BASIC)
+        gateway = FakeGateway([matching, too_old, too_many_km, no_autopilot])
         repository = FakeRepository(latest=None)
         notifier = FakeNotifier()
 
@@ -109,7 +122,7 @@ class TestCheckInventoryUseCase:
         result = use_case.execute()
 
         assert len(result.snapshot.vehicles) == 1
-        assert result.snapshot.vehicles[0].vin == "A"
+        assert result.snapshot.vehicles[0].id == "A"
 
     def test_no_notification_when_no_new_vehicles(self) -> None:
         vehicles = [_vehicle("A")]
@@ -140,9 +153,9 @@ class TestCheckInventoryUseCase:
         result = use_case.execute()
 
         assert len(result.diff.new_vehicles) == 1
-        assert result.diff.new_vehicles[0].vin == "B"
+        assert result.diff.new_vehicles[0].id == "B"
         assert len(notifier.notified) == 1
-        assert notifier.notified[0].vin == "B"
+        assert notifier.notified[0].id == "B"
 
     def test_saves_snapshot_after_check(self) -> None:
         gateway = FakeGateway([_vehicle("A")])
@@ -168,9 +181,9 @@ class TestCheckInventoryUseCase:
         result = use_case.execute()
 
         assert len(result.diff.removed_vehicles) == 1
-        assert result.diff.removed_vehicles[0].vin == "B"
+        assert result.diff.removed_vehicles[0].id == "B"
         assert len(notifier.sold) == 1
-        assert notifier.sold[0].vin == "B"
+        assert notifier.sold[0].id == "B"
         assert len(notifier.notified) == 0
 
     def test_empty_gateway_response(self) -> None:
@@ -186,7 +199,7 @@ class TestCheckInventoryUseCase:
 
     def test_notifies_error_when_gateway_fails(self) -> None:
         class FailingGateway:
-            def fetch_vehicles(self) -> list[Vehicle]:
+            def fetch_vehicles(self, known: Mapping[str, Vehicle]) -> list[Vehicle]:
                 raise RuntimeError("Tesla API changed")
 
         repository = FakeRepository(latest=None)
