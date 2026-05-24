@@ -21,10 +21,27 @@ _PAINT_MAP: dict[str, Paint] = {"WHITE": Paint.WHITE, "BLACK": Paint.BLACK}
 _MODEL_CODE: dict[Model, str] = {Model.M3: "m3", Model.MY: "my"}
 
 
+_FSD_CODE_HINTS = ("FSD", "AUTOPARK", "FULL_SELF_DRIVING")
+_ENHANCED_CODE_HINTS = ("ENHANCED_AUTOPILOT", "EAP", "ENHANCED")
+_KNOWN_AUTOPILOT_CODES = {
+    "AUTOPILOT",
+    "ENHANCED_AUTOPILOT",
+    "FSD",
+    "AUTOPARK",
+    "FULL_SELF_DRIVING",
+}
+
+
 def _autopilot_from_codes(codes: list[str]) -> Autopilot:
-    if "FSD" in codes or "AUTOPARK" in codes:
+    # Tesla can update AUTOPILOT codes (e.g. May 2026 dropped purchasable EAP/FSD
+    # in favor of a subscription). Be tolerant: look for substrings rather than
+    # exact matches, and log anything we don't recognize so we can extend the map.
+    for code in codes:
+        if code and code not in _KNOWN_AUTOPILOT_CODES:
+            log.info(f"Unknown Tesla AUTOPILOT code seen: {code!r}")
+    if any(h in code for code in codes for h in _FSD_CODE_HINTS):
         return Autopilot.FSD
-    if "ENHANCED_AUTOPILOT" in codes:
+    if any(h in code for code in codes for h in _ENHANCED_CODE_HINTS):
         return Autopilot.ENHANCED
     return Autopilot.BASIC
 
@@ -71,6 +88,10 @@ def _build_inventory_url(config: TeslaSearchConfig) -> str:
 def _build_api_query(config: TeslaSearchConfig) -> dict[str, object]:
     years = list(range(config.min_year, 2027))
     model_code = _MODEL_CODE[config.model]
+    # Tesla revised its purchase options in May 2026 (no more buying EAP/FSD
+    # outright, FSD subscription only). The AUTOPILOT filter code may not be
+    # accepted anymore, so we no longer constrain on it server-side — the
+    # client-side SearchCriteria filter still keeps the user's preferences.
     return {
         "query": {
             "model": model_code,
@@ -78,7 +99,6 @@ def _build_api_query(config: TeslaSearchConfig) -> dict[str, object]:
             "options": {
                 "Year": years,
                 "PAINT": [p.value for p in config.paints],
-                "AUTOPILOT": ["ENHANCED_AUTOPILOT"],
                 "TRIM": [t.value for t in config.trims],
             },
             "arrangeby": "Price",
@@ -161,16 +181,17 @@ class TeslaPlaywrightGateway:
                 raise RuntimeError(f"Tesla API call failed: {raw_result['error']}")
 
             response = TeslaInventoryResponse.model_validate(raw_result.get("data", {}))
-            vehicles = [
-                v
-                for r in response.results
-                if (
-                    v := _to_vehicle(
-                        r, self._config.model, self._config.language, self._config.market
-                    )
+            log.info(f"API returned {len(response.results)} raw result(s).")
+            vehicles: list[Vehicle] = []
+            for r in response.results:
+                v = _to_vehicle(
+                    r, self._config.model, self._config.language, self._config.market
                 )
-                is not None
-            ]
-            log.info(f"API returned {len(vehicles)} vehicle(s).")
+                if v is None:
+                    continue
+                log.info(
+                    f"  {r.VIN[-6:]}: AUTOPILOT={r.AUTOPILOT} -> {v.autopilot.value}"
+                )
+                vehicles.append(v)
 
         return vehicles
