@@ -8,7 +8,13 @@ from src.domain.vehicle import Autopilot, Model, Paint, Trim
 
 @dataclass(frozen=True)
 class TeslaSearchConfig:
-    """Tesla inventory search parameters (single model)."""
+    """Tesla inventory search parameters (single model).
+
+    Since 2026-05-21 Tesla no longer sells EAP/FSD outright — the used
+    inventory only carries base Autopilot and FSD is offered as a separate
+    subscription. We accept all autopilot tiers so the user gets pinged for
+    any AWD M3 matching the rest of the criteria.
+    """
 
     model: Model
     zip_code: str = "59130"
@@ -21,7 +27,11 @@ class TeslaSearchConfig:
     max_odometer: int = 50000
     paints: tuple[Paint, ...] = (Paint.WHITE, Paint.BLACK)
     trims: tuple[Trim, ...] = (Trim.LRAWD, Trim.PRAWD, Trim.PAWD)
-    accepted_autopilots: tuple[Autopilot, ...] = (Autopilot.ENHANCED,)
+    accepted_autopilots: tuple[Autopilot, ...] = (
+        Autopilot.BASIC,
+        Autopilot.ENHANCED,
+        Autopilot.FSD,
+    )
 
 
 @dataclass(frozen=True)
