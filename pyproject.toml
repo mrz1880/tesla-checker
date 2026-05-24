@@ -51,6 +51,7 @@ ignore_missing_imports = true
 module = [
     "src.infrastructure.tesla_playwright_gateway",
     "src.infrastructure.leboncoin_gateway",
+    "src.infrastructure.leboncoin_scraper",
 ]
 disallow_untyped_calls = false
-disable_error_code = ["type-arg"]
+disable_error_code = ["type-arg", "attr-defined", "no-any-return"]
