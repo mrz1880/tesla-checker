@@ -7,6 +7,7 @@ dependencies = [
     "playwright",
     "camoufox",
     "pydantic>=2",
+    "curl-cffi>=0.7",
 ]
 
 [project.optional-dependencies]
@@ -42,13 +43,14 @@ python_version = "3.12"
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["camoufox.*", "playwright.*"]
+module = ["camoufox.*", "playwright.*", "curl_cffi.*"]
 ignore_missing_imports = true
 
-# Camoufox has no type stubs
+# Camoufox / curl-cffi have no usable type stubs in our usage
 [[tool.mypy.overrides]]
 module = [
     "src.infrastructure.tesla_playwright_gateway",
     "src.infrastructure.leboncoin_gateway",
 ]
 disallow_untyped_calls = false
+disable_error_code = ["type-arg"]

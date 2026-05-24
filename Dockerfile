@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir playwright camoufox "pydantic>=2"
+RUN pip install --no-cache-dir playwright camoufox "pydantic>=2" "curl-cffi>=0.7"
 RUN camoufox fetch
 
 COPY src/ src/
