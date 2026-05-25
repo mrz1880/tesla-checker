@@ -52,6 +52,10 @@ class LeboncoinScraper:
         self._browser = self._browser_ctx.__enter__()
         self._page = self._browser.new_page()
 
+        # Swallow page-level JS errors before Playwright's internal handler can
+        # trip on malformed pageerror payloads (real Playwright bug we've hit).
+        self._page.on("pageerror", lambda e: None)
+
         log.info("Warming up via Leboncoin homepage...")
         self._page.goto(_HOME_URL, wait_until="domcontentloaded", timeout=60000)
         self._page.wait_for_timeout(5000)
@@ -123,6 +127,15 @@ class LeboncoinScraper:
 
         # Refresh cookies on the http session — DataDome can rotate tokens.
         self._refresh_cookies()
+
+        # Park the page on about:blank so no late JS from the LBC search page
+        # fires a pageerror event while curl-cffi is fetching details. A real
+        # bug in Playwright's coreBundle.js crashes the Node driver when the
+        # event payload misses `location.url`, which kills the whole session.
+        try:
+            self._page.goto("about:blank", wait_until="domcontentloaded", timeout=10000)
+        except Exception as e:
+            log.warning(f"Could not park LBC page on about:blank: {e}")
 
         return _extract_search_data(raw).ads
 
